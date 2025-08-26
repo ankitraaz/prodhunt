@@ -1,25 +1,32 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 👈 added
 import 'package:prodhunt/model/user_model.dart';
 import 'package:prodhunt/services/firebase_service.dart';
 
 class UserService {
-  // Create user profile
+  // CREATE (forces server timestamps + defaults)
   static Future<void> createUserProfile(UserModel user) async {
     try {
-      await FirebaseService.usersRef.doc(user.userId).set(user.toMap());
+      await FirebaseService.usersRef.doc(user.userId).set({
+        ...user.toMap(), // your fields
+        'followers': <String>[],
+        'following': <String>[],
+        'followersCount': 0,
+        'followingCount': 0,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     } catch (e) {
       print('Error creating user profile: $e');
       rethrow;
     }
   }
 
-  // Get user profile
+  // READ single
   static Future<UserModel?> getUserProfile(String userId) async {
     try {
-      DocumentSnapshot doc = await FirebaseService.usersRef.doc(userId).get();
-      if (doc.exists) {
-        return UserModel.fromFirestore(doc);
-      }
+      final doc = await FirebaseService.usersRef.doc(userId).get();
+      if (doc.exists) return UserModel.fromFirestore(doc);
       return null;
     } catch (e) {
       print('Error getting user profile: $e');
@@ -27,26 +34,39 @@ class UserService {
     }
   }
 
-  // Get current user profile
+  // READ current
   static Future<UserModel?> getCurrentUserProfile() async {
-    String? userId = FirebaseService.currentUserId;
-    if (userId != null) {
-      return await getUserProfile(userId);
-    }
-    return null;
+    final userId = FirebaseService.currentUserId;
+    if (userId == null) return null;
+    return getUserProfile(userId);
   }
 
-  // Update user profile
+  // 🔴 Live current user (for real-time username, etc.)
+  static Stream<UserModel?> currentUserStream() {
+    final uid = FirebaseService.currentUserId;
+    if (uid == null) return const Stream.empty();
+    return FirebaseService.usersRef.doc(uid).snapshots().map((s) {
+      if (!s.exists) return null;
+      return UserModel.fromFirestore(s);
+    });
+  }
+
+  // UPDATE (protect createdAt; always bump updatedAt)
   static Future<void> updateUserProfile(UserModel user) async {
     try {
-      await FirebaseService.usersRef.doc(user.userId).update(user.toMap());
+      final map = user.toMap(); // by default no timestamps included
+      map.remove('createdAt'); // never overwrite createdAt
+      await FirebaseService.usersRef.doc(user.userId).set({
+        ...map,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
     } catch (e) {
       print('Error updating user profile: $e');
       rethrow;
     }
   }
 
-  // Update specific field
+  // UPDATE specific field
   static Future<void> updateUserField(
     String userId,
     String field,
@@ -63,14 +83,56 @@ class UserService {
     }
   }
 
-  // Check if username exists
+  // ✅ Username update (validation + uniqueness + timestamps + Auth sync)
+  static Future<void> updateUsername(String newUsername) async {
+    final uid = FirebaseService.currentUserId;
+    if (uid == null) {
+      throw Exception('Not logged in');
+    }
+
+    final username = newUsername.trim().toLowerCase();
+
+    // basic validation
+    final ok = RegExp(r'^[a-z0-9_]{4,}$').hasMatch(username);
+    if (!ok) {
+      throw Exception(
+        'Username must be 4+ chars, lowercase letters, numbers, _ only.',
+      );
+    }
+
+    // current value
+    final doc = await FirebaseService.usersRef.doc(uid).get();
+    final data = (doc.data() as Map<String, dynamic>?) ?? {};
+    final current = (data['username'] ?? '').toString();
+
+    // uniqueness (allow if unchanged)
+    if (current != username) {
+      final exists = await checkUsernameExists(username);
+      if (exists) {
+        throw Exception('This username is already taken.');
+      }
+    }
+
+    // update Firestore
+    await FirebaseService.usersRef.doc(uid).update({
+      'username': username,
+      'displayName': username, // optional mirror
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // optional: sync FirebaseAuth displayName
+    try {
+      await FirebaseAuth.instance.currentUser?.updateDisplayName(username);
+    } catch (_) {}
+  }
+
+  // EXISTS username
   static Future<bool> checkUsernameExists(String username) async {
     try {
-      QuerySnapshot query = await FirebaseService.usersRef
+      final query = await FirebaseService.usersRef
           .where('username', isEqualTo: username)
           .limit(1)
           .get();
-
       return query.docs.isNotEmpty;
     } catch (e) {
       print('Error checking username: $e');
@@ -78,70 +140,101 @@ class UserService {
     }
   }
 
-  // Search users by username
+  // SEARCH (simple prefix)
   static Future<List<UserModel>> searchUsers(String query) async {
     try {
-      // Note: This is basic search. For advanced search, use Algolia
-      QuerySnapshot snapshot = await FirebaseService.usersRef
+      final snapshot = await FirebaseService.usersRef
           .where('username', isGreaterThanOrEqualTo: query)
-          .where('username', isLessThan: query + 'z')
+          .where('username', isLessThan: '$query\uf8ff')
           .limit(20)
           .get();
-
-      return snapshot.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
+      return snapshot.docs.map(UserModel.fromFirestore).toList();
     } catch (e) {
       print('Error searching users: $e');
       return [];
     }
   }
 
-  // Follow user
+  // FOLLOW
   static Future<void> followUser(String targetUserId) async {
-    try {
-      String? currentUserId = FirebaseService.currentUserId;
-      if (currentUserId == null) return;
+    final currentUserId = FirebaseService.currentUserId;
+    if (currentUserId == null) return;
+    if (currentUserId == targetUserId) return; // self-follow guard
 
-      await FirebaseService.firestore.runTransaction((transaction) async {
-        // Add to current user's following list
-        transaction.update(FirebaseService.usersRef.doc(currentUserId), {
+    final users = FirebaseService.usersRef;
+    final currRef = users.doc(currentUserId);
+    final tgtRef = users.doc(targetUserId);
+
+    await FirebaseService.firestore.runTransaction((tx) async {
+      final currSnap = await tx.get(currRef);
+      final tgtSnap = await tx.get(tgtRef);
+      if (!currSnap.exists || !tgtSnap.exists) return;
+
+      final currData = (currSnap.data() as Map<String, dynamic>?) ?? {};
+      final List following = (currData['following'] is Iterable)
+          ? List.from(currData['following'])
+          : <dynamic>[];
+      final bool alreadyFollowing = following.contains(targetUserId);
+
+      if (!alreadyFollowing) {
+        tx.update(currRef, {
           'following': FieldValue.arrayUnion([targetUserId]),
+          'followingCount': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
-
-        // Add to target user's followers list
-        transaction.update(FirebaseService.usersRef.doc(targetUserId), {
+        tx.update(tgtRef, {
           'followers': FieldValue.arrayUnion([currentUserId]),
+          'followersCount': FieldValue.increment(1),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
-      });
-    } catch (e) {
-      print('Error following user: $e');
-      rethrow;
-    }
+      }
+    });
   }
 
-  // Unfollow user
+  // UNFOLLOW
   static Future<void> unfollowUser(String targetUserId) async {
-    try {
-      String? currentUserId = FirebaseService.currentUserId;
-      if (currentUserId == null) return;
+    final currentUserId = FirebaseService.currentUserId;
+    if (currentUserId == null) return;
+    if (currentUserId == targetUserId) return;
 
-      await FirebaseService.firestore.runTransaction((transaction) async {
-        // Remove from current user's following list
-        transaction.update(FirebaseService.usersRef.doc(currentUserId), {
+    final users = FirebaseService.usersRef;
+    final currRef = users.doc(currentUserId);
+    final tgtRef = users.doc(targetUserId);
+
+    await FirebaseService.firestore.runTransaction((tx) async {
+      final currSnap = await tx.get(currRef);
+      final tgtSnap = await tx.get(tgtRef);
+      if (!currSnap.exists || !tgtSnap.exists) return;
+
+      final currData = (currSnap.data() as Map<String, dynamic>?) ?? {};
+      final tgtData = (tgtSnap.data() as Map<String, dynamic>?) ?? {};
+
+      final List following = (currData['following'] is Iterable)
+          ? List.from(currData['following'])
+          : <dynamic>[];
+      final List followers = (tgtData['followers'] is Iterable)
+          ? List.from(tgtData['followers'])
+          : <dynamic>[];
+
+      final bool isFollowing = following.contains(targetUserId);
+      final bool targetHasCurrent = followers.contains(currentUserId);
+
+      if (isFollowing && targetHasCurrent) {
+        tx.update(currRef, {
           'following': FieldValue.arrayRemove([targetUserId]),
+          'followingCount': FieldValue.increment(-1),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
-
-        // Remove from target user's followers list
-        transaction.update(FirebaseService.usersRef.doc(targetUserId), {
+        tx.update(tgtRef, {
           'followers': FieldValue.arrayRemove([currentUserId]),
+          'followersCount': FieldValue.increment(-1),
+          'updatedAt': FieldValue.serverTimestamp(),
         });
-      });
-    } catch (e) {
-      print('Error unfollowing user: $e');
-      rethrow;
-    }
+      }
+    });
   }
 
-  // Delete user profile
+  // DELETE
   static Future<void> deleteUserProfile(String userId) async {
     try {
       await FirebaseService.usersRef.doc(userId).delete();
@@ -151,32 +244,25 @@ class UserService {
     }
   }
 
-  // Get user's followers
+  // STREAM: followers (users who have current userId in their "following")
   static Stream<List<UserModel>> getUserFollowers(String userId) {
     return FirebaseService.usersRef
         .where('following', arrayContains: userId)
         .snapshots()
-        .map(
-          (snapshot) =>
-              snapshot.docs.map((doc) => UserModel.fromFirestore(doc)).toList(),
-        );
+        .map((snap) => snap.docs.map(UserModel.fromFirestore).toList());
   }
 
-  // Get user's following
+  // STREAM: following (resolve ids to UserModel)
   static Stream<List<UserModel>> getUserFollowing(String userId) {
     return FirebaseService.usersRef.doc(userId).snapshots().asyncMap((
       doc,
     ) async {
-      if (doc.exists) {
-        UserModel user = UserModel.fromFirestore(doc);
-        List<Future<UserModel?>> futures = user.following
-            .map((id) => getUserProfile(id))
-            .toList();
-
-        List<UserModel?> results = await Future.wait(futures);
-        return results.where((user) => user != null).cast<UserModel>().toList();
-      }
-      return <UserModel>[];
+      if (!doc.exists) return <UserModel>[];
+      final user = UserModel.fromFirestore(doc);
+      if (user.following.isEmpty) return <UserModel>[];
+      final futures = user.following.map(getUserProfile).toList();
+      final results = await Future.wait(futures);
+      return results.whereType<UserModel>().toList();
     });
   }
 }

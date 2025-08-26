@@ -1,16 +1,16 @@
 // lib/main.dart
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:prodhunt/pages/profile_page.dart';
+import 'package:provider/provider.dart';
+
 import 'package:prodhunt/Auth/auth.dart';
 import 'package:prodhunt/pages/homepage.dart';
 import 'package:prodhunt/services/firestore_service.dart';
-import 'package:provider/provider.dart';
-
 import 'firebase_options.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
@@ -19,113 +19,170 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // Light theme (Orange accent)
+  ThemeData _lightTheme() {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFFEA580C), // deepOrange-ish
+      brightness: Brightness.light,
+    );
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: scheme,
+      fontFamily: 'Inter',
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+      ),
+    );
+  }
+
+  // Dark theme (Purple + Black accent)
+  ThemeData _darkTheme() {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: Colors.black,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.deepPurple,
+        brightness: Brightness.dark,
+      ),
+      fontFamily: 'Inter',
+      inputDecorationTheme: const InputDecorationTheme(
+        filled: true,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+        ),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.deepPurple,
+        elevation: 0,
+      ),
+      drawerTheme: const DrawerThemeData(backgroundColor: Colors.black),
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(color: Colors.white),
+        bodyMedium: TextStyle(color: Colors.white70),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        // Add FirestoreService for profile management
-        ChangeNotifierProvider(create: (_) => FirestoreService()),
-      ],
+      providers: [ChangeNotifierProvider(create: (_) => FirestoreService())],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'Product Hunt',
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
-          fontFamily: 'Inter',
-        ),
-        home: StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(color: Colors.deepOrange),
-                      SizedBox(height: 16),
-                      Text(
-                        'Loading Product Hunt...',
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return Scaffold(
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 64,
-                        color: Colors.red.shade400,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Something went wrong!',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        snapshot.error.toString(),
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // Force rebuild
-                          (context as Element).markNeedsBuild();
-                        },
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepOrange,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-
-            if (snapshot.hasData) {
-              // 🔁 Logged-in user: Load profile and show adaptive shell
-              return Consumer<FirestoreService>(
-                builder: (context, firestoreService, child) {
-                  // Auto-load user profile when logged in
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (firestoreService.currentUser == null &&
-                        !firestoreService.isLoading) {
-                      firestoreService.getCurrentUserProfile();
-                    }
-                  });
-
-                  return const HomePage();
-                },
-              );
-            }
-
-            // 🚪 Not logged-in: show auth
-            return const AuthScreen();
-          },
-        ),
-        // Add route handling for navigation
+        themeMode: ThemeMode.system, // auto light/dark
+        theme: _lightTheme(),
+        darkTheme: _darkTheme(),
+        home: const _AuthGate(),
         routes: {
-          '/auth': (context) => const AuthScreen(),
-          '/home': (context) => const HomePage(),
+          '/auth': (_) => const AuthScreen(),
+          '/home': (_) => HomePage(),
+          '/profile': (_) => const ProfilePage(),
         },
       ),
+    );
+  }
+}
+
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2.6),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Loading Product Hunt...',
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        if (snap.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Card(
+                elevation: 0,
+                color: cs.surfaceContainerHighest,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.error_outline, size: 56, color: cs.error),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Something went wrong!',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${snap.error}',
+                          style: TextStyle(color: cs.onSurfaceVariant),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          onPressed: () =>
+                              (context as Element).markNeedsBuild(),
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (snap.hasData) {
+          // Logged-in → ensure profile loaded once
+          return Consumer<FirestoreService>(
+            builder: (_, fs, __) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (fs.currentUser == null && !fs.isLoading) {
+                  fs.getCurrentUserProfile();
+                }
+              });
+              return HomePage();
+            },
+          );
+        }
+
+        // Not logged-in → Auth
+        return const AuthScreen();
+      },
     );
   }
 }
