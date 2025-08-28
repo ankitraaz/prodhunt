@@ -83,6 +83,16 @@ class UserService {
     }
   }
 
+  // ✅ NEW: owner-safe helper (current user par hi write karega)
+  static Future<void> updateMyField(String field, dynamic value) async {
+    final uid = FirebaseService.currentUserId;
+    if (uid == null) throw Exception('Not logged in');
+    await FirebaseService.usersRef.doc(uid).update({
+      field: value,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   // ✅ Username update (validation + uniqueness + timestamps + Auth sync)
   static Future<void> updateUsername(String newUsername) async {
     final uid = FirebaseService.currentUserId;
