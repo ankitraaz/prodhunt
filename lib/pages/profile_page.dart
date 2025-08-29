@@ -62,14 +62,28 @@ class ProfilePage extends StatelessWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircleAvatar(
-                            radius: 30,
-                            backgroundColor: cs.surfaceVariant,
-                            child: Icon(
-                              Icons.person,
-                              color: cs.onSurfaceVariant,
-                              size: 32,
-                            ),
+                          Builder(
+                            builder: (_) {
+                              final pic = user.profilePicture; // from UserModel
+                              final url = (pic.isNotEmpty)
+                                  ? '$pic${pic.contains('?') ? '&' : '?'}ts=${DateTime.now().millisecondsSinceEpoch}'
+                                  : '';
+
+                              return CircleAvatar(
+                                radius: 30,
+                                backgroundColor: cs.surfaceVariant,
+                                backgroundImage: url.isNotEmpty
+                                    ? NetworkImage(url)
+                                    : null,
+                                child: url.isEmpty
+                                    ? Icon(
+                                        Icons.person,
+                                        color: cs.onSurfaceVariant,
+                                        size: 32,
+                                      )
+                                    : null,
+                              );
+                            },
                           ),
                           const SizedBox(width: 16),
                           Expanded(

@@ -22,8 +22,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
   final _usernameCtrl = TextEditingController(); // username
   final _headlineCtrl = TextEditingController(); // free text
   final _aboutCtrl = TextEditingController(); // bio
-  final _launchedCtrl = TextEditingController(); // launched
-  final _collectionCtrl = TextEditingController(); // collection
+  final _launchedCtrl = TextEditingController(); // launched (free)
+  final _collectionCtrl = TextEditingController(); // collection (free)
 
   bool _saving = false;
   bool _initOnce = false;
@@ -54,14 +54,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     setState(() => _saving = true);
     try {
+      // compress to jpeg (~1MB) to avoid iOS "message too long"
       Uint8List? jpeg = await FlutterImageCompress.compressWithFile(
         picked.path,
         quality: 82,
         minWidth: 1024,
-        format: CompressFormat.jpeg,
         keepExif: false,
+        format: CompressFormat.jpeg,
       );
-
       jpeg ??= await picked.readAsBytes();
 
       final ref = FirebaseStorage.instance.ref('users/$uid/avatar.jpg');
@@ -86,18 +86,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<void> _removeAvatar() async {
     final uid = FirebaseService.currentUserId;
     if (uid == null) return;
+
     setState(() => _saving = true);
     try {
       try {
-        await FirebaseStorage.instance
-            .ref()
-            .child('users/$uid/avatar.jpg')
-            .delete();
+        await FirebaseStorage.instance.ref('users/$uid/avatar.jpg').delete();
       } catch (_) {}
       await FirebaseService.usersRef.doc(uid).update({
         'profilePicture': '',
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
       if (!mounted) return;
       setState(() => _avatarUrl = '');
       _snack('Photo removed');
@@ -124,6 +123,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     setState(() => _saving = true);
 
     try {
+      // if username changed -> go via service (validates + uniqueness + auth sync)
       final snap = await FirebaseService.usersRef.doc(uid).get();
       final data = (snap.data() as Map<String, dynamic>?) ?? {};
       final currentUsername = (data['username'] ?? '').toString();
@@ -132,9 +132,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
         await UserService.updateUsername(username);
       }
 
-      final Map<String, dynamic> patch = {
+      // other fields (do NOT touch role/isAdmin/createdAt)
+      final patch = <String, dynamic>{
         'displayName': name,
-        'username': username,
         'bio': bio,
         'headline': headline,
         'launched': launched,
@@ -170,7 +170,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         title: const Text('Edit profile'),
       ),
       body: uid == null
-          ? Center(child: Text('Not signed in'))
+          ? const Center(child: Text('Not signed in'))
           : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: FirebaseService.usersRef
                   .doc(uid)
@@ -235,7 +235,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           label: 'Name',
                           child: TextFormField(
                             controller: _nameCtrl,
-                            validator: (v) => v!.length > 60
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              hintText: 'Your name',
+                            ),
+                            validator: (v) => (v?.trim().length ?? 0) > 60
                                 ? 'Keep it under 60 characters'
                                 : null,
                           ),
@@ -244,8 +248,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           label: 'Username',
                           child: TextFormField(
                             controller: _usernameCtrl,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              hintText: 'lowercase, 4+ chars',
+                            ),
                             validator: (v) {
-                              final val = v!.trim().toLowerCase();
+                              final val = (v ?? '').trim().toLowerCase();
                               if (val.length < 4) return 'Min 4 characters';
                               if (!RegExp(r'^[a-z0-9_]+$').hasMatch(val)) {
                                 return 'Only lowercase, numbers, _';
@@ -258,8 +266,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           label: 'Headline',
                           child: TextFormField(
                             controller: _headlineCtrl,
-                            validator: (v) =>
-                                v!.length > 100 ? 'Max 100 characters' : null,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              hintText: 'e.g., Indie maker at X',
+                            ),
+                            validator: (v) => (v?.trim().length ?? 0) > 100
+                                ? 'Max 100 characters'
+                                : null,
                           ),
                         ),
                         _LabeledField(
@@ -269,6 +282,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             minLines: 3,
                             maxLines: 6,
                             maxLength: 280,
+                            textInputAction: TextInputAction.newline,
+                            decoration: const InputDecoration(
+                              hintText: 'Tell people about yourself…',
+                            ),
                           ),
                         ),
                         _LabeledField(

@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 👈 added
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:prodhunt/model/user_model.dart';
 import 'package:prodhunt/services/firebase_service.dart';
 
@@ -83,7 +83,7 @@ class UserService {
     }
   }
 
-  // ✅ NEW: owner-safe helper (current user par hi write karega)
+  // ✅ owner-safe helper (current user par hi write karega)
   static Future<void> updateMyField(String field, dynamic value) async {
     final uid = FirebaseService.currentUserId;
     if (uid == null) throw Exception('Not logged in');

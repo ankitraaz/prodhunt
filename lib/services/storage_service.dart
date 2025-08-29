@@ -1,83 +1,91 @@
+// lib/services/storage_service.dart
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
-import '../services/firebase_service.dart';
+import 'package:prodhunt/services/firebase_service.dart';
 
 class StorageService {
-  static final FirebaseStorage _storage = FirebaseService.storage;
+  static FirebaseStorage get _storage => FirebaseStorage.instance;
 
-  // Upload profile picture
+  /// Upload user avatar -> gs://.../users/<uid>/avatar.jpg
   static Future<String?> uploadProfilePicture(XFile imageFile) async {
     try {
-      String userId = FirebaseService.currentUserId!;
-      String fileName = 'profile_pictures/$userId.jpg';
+      final uid = FirebaseService.currentUserId;
+      if (uid == null) return null;
 
-      Reference ref = _storage.ref().child(fileName);
-      UploadTask uploadTask = ref.putFile(File(imageFile.path));
+      // compress to jpeg (<= ~1MB)
+      Uint8List? jpeg = await FlutterImageCompress.compressWithFile(
+        imageFile.path,
+        quality: 82,
+        minWidth: 1024,
+        format: CompressFormat.jpeg,
+        keepExif: false,
+      );
+      jpeg ??= await File(imageFile.path).readAsBytes();
 
-      TaskSnapshot snapshot = await uploadTask;
-      String downloadUrl = await snapshot.ref.getDownloadURL();
-
-      return downloadUrl;
+      final ref = _storage.ref('users/$uid/avatar.jpg');
+      await ref.putData(jpeg, SettableMetadata(contentType: 'image/jpeg'));
+      return await ref.getDownloadURL();
     } catch (e) {
       print('Error uploading profile picture: $e');
       return null;
     }
   }
 
-  // Upload product logo
+  /// Product logo under the signed-in user's folder so rules pass:
+  /// gs://.../users/<uid>/products/<productId>/logo.jpg
   static Future<String?> uploadProductLogo(
     XFile imageFile,
     String productId,
   ) async {
     try {
-      String fileName = 'product_logos/$productId.jpg';
+      final uid = FirebaseService.currentUserId;
+      if (uid == null) return null;
 
-      Reference ref = _storage.ref().child(fileName);
-      UploadTask uploadTask = ref.putFile(File(imageFile.path));
-
-      TaskSnapshot snapshot = await uploadTask;
-      String downloadUrl = await snapshot.ref.getDownloadURL();
-
-      return downloadUrl;
+      final ref = _storage.ref('users/$uid/products/$productId/logo.jpg');
+      await ref.putFile(
+        File(imageFile.path),
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      return await ref.getDownloadURL();
     } catch (e) {
       print('Error uploading product logo: $e');
       return null;
     }
   }
 
-  // Upload product gallery images
+  /// Gallery: gs://.../users/<uid>/products/<productId>/gallery/img_<i>.jpg
   static Future<List<String>> uploadProductGallery(
     List<XFile> imageFiles,
     String productId,
   ) async {
     try {
-      List<String> downloadUrls = [];
+      final uid = FirebaseService.currentUserId;
+      if (uid == null) return [];
 
+      final urls = <String>[];
       for (int i = 0; i < imageFiles.length; i++) {
-        String fileName = 'product_gallery/$productId/image_$i.jpg';
-
-        Reference ref = _storage.ref().child(fileName);
-        UploadTask uploadTask = ref.putFile(File(imageFiles[i].path));
-
-        TaskSnapshot snapshot = await uploadTask;
-        String downloadUrl = await snapshot.ref.getDownloadURL();
-
-        downloadUrls.add(downloadUrl);
+        final ref = _storage.ref(
+          'users/$uid/products/$productId/gallery/img_$i.jpg',
+        );
+        await ref.putFile(
+          File(imageFiles[i].path),
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        urls.add(await ref.getDownloadURL());
       }
-
-      return downloadUrls;
+      return urls;
     } catch (e) {
       print('Error uploading product gallery: $e');
       return [];
     }
   }
 
-  // Delete image
   static Future<bool> deleteImage(String imageUrl) async {
     try {
-      Reference ref = _storage.refFromURL(imageUrl);
-      await ref.delete();
+      await _storage.refFromURL(imageUrl).delete();
       return true;
     } catch (e) {
       print('Error deleting image: $e');
