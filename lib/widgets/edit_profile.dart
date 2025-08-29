@@ -18,12 +18,8 @@ class EditProfilePage extends StatefulWidget {
 class _EditProfilePageState extends State<EditProfilePage> {
   final _form = GlobalKey<FormState>();
 
-  final _nameCtrl = TextEditingController(); // displayName
   final _usernameCtrl = TextEditingController(); // username
-  final _headlineCtrl = TextEditingController(); // free text
-  final _aboutCtrl = TextEditingController(); // bio
-  final _launchedCtrl = TextEditingController(); // launched (free)
-  final _collectionCtrl = TextEditingController(); // collection (free)
+  final _bioCtrl = TextEditingController(); // bio
 
   bool _saving = false;
   bool _initOnce = false;
@@ -31,12 +27,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
     _usernameCtrl.dispose();
-    _headlineCtrl.dispose();
-    _aboutCtrl.dispose();
-    _launchedCtrl.dispose();
-    _collectionCtrl.dispose();
+    _bioCtrl.dispose();
     super.dispose();
   }
 
@@ -54,7 +46,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     setState(() => _saving = true);
     try {
-      // compress to jpeg (~1MB) to avoid iOS "message too long"
+      // compress to jpeg (~1MB)
       Uint8List? jpeg = await FlutterImageCompress.compressWithFile(
         picked.path,
         quality: 82,
@@ -66,7 +58,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
       final ref = FirebaseStorage.instance.ref('users/$uid/avatar.jpg');
       await ref.putData(jpeg, SettableMetadata(contentType: 'image/jpeg'));
-      final url = await ref.getDownloadURL();
+
+      // 👉 cache-bust with timestamp
+      final baseUrl = await ref.getDownloadURL();
+      final bust = DateTime.now().millisecondsSinceEpoch;
+      final url = '$baseUrl?t=$bust';
 
       await FirebaseService.usersRef.doc(uid).update({
         'profilePicture': url,
@@ -113,17 +109,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final uid = FirebaseService.currentUserId;
     if (uid == null) return;
 
-    final name = _nameCtrl.text.trim();
     final username = _usernameCtrl.text.trim().toLowerCase();
-    final headline = _headlineCtrl.text.trim();
-    final bio = _aboutCtrl.text.trim();
-    final launched = _launchedCtrl.text.trim();
-    final collection = _collectionCtrl.text.trim();
+    final bio = _bioCtrl.text.trim();
 
     setState(() => _saving = true);
 
     try {
-      // if username changed -> go via service (validates + uniqueness + auth sync)
+      // if username changed -> validate + uniqueness + auth sync
       final snap = await FirebaseService.usersRef.doc(uid).get();
       final data = (snap.data() as Map<String, dynamic>?) ?? {};
       final currentUsername = (data['username'] ?? '').toString();
@@ -132,20 +124,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
         await UserService.updateUsername(username);
       }
 
-      // other fields (do NOT touch role/isAdmin/createdAt)
-      final patch = <String, dynamic>{
-        'displayName': name,
+      // only bio (and timestamp)
+      await FirebaseService.usersRef.doc(uid).update({
         'bio': bio,
-        'headline': headline,
-        'launched': launched,
-        'collection': collection,
         'updatedAt': FieldValue.serverTimestamp(),
-      };
-      await FirebaseService.usersRef.doc(uid).update(patch);
+      });
 
       if (!mounted) return;
       _snack('Profile saved');
-      Navigator.pop(context);
+      Navigator.pop(context, true);
     } catch (e) {
       _snack(e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -183,12 +170,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 final data = snap.data?.data() ?? {};
 
                 if (!_initOnce) {
-                  _nameCtrl.text = (data['displayName'] ?? '').toString();
                   _usernameCtrl.text = (data['username'] ?? '').toString();
-                  _headlineCtrl.text = (data['headline'] ?? '').toString();
-                  _aboutCtrl.text = (data['bio'] ?? '').toString();
-                  _launchedCtrl.text = (data['launched'] ?? '').toString();
-                  _collectionCtrl.text = (data['collection'] ?? '').toString();
+                  _bioCtrl.text = (data['bio'] ?? '').toString();
                   _avatarUrl = (data['profilePicture'] ?? '').toString();
                   _initOnce = true;
                 }
@@ -231,24 +214,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         ),
                         const SizedBox(height: 18),
 
-                        _LabeledField(
-                          label: 'Name',
-                          child: TextFormField(
-                            controller: _nameCtrl,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              hintText: 'Your name',
-                            ),
-                            validator: (v) => (v?.trim().length ?? 0) > 60
-                                ? 'Keep it under 60 characters'
-                                : null,
-                          ),
-                        ),
+                        // Username only
                         _LabeledField(
                           label: 'Username',
                           child: TextFormField(
                             controller: _usernameCtrl,
                             textInputAction: TextInputAction.next,
+                            textCapitalization: TextCapitalization.sentences,
                             decoration: const InputDecoration(
                               hintText: 'lowercase, 4+ chars',
                             ),
@@ -262,23 +234,12 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             },
                           ),
                         ),
+
+                        // Bio
                         _LabeledField(
-                          label: 'Headline',
+                          label: 'Bio',
                           child: TextFormField(
-                            controller: _headlineCtrl,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              hintText: 'e.g., Indie maker at X',
-                            ),
-                            validator: (v) => (v?.trim().length ?? 0) > 100
-                                ? 'Max 100 characters'
-                                : null,
-                          ),
-                        ),
-                        _LabeledField(
-                          label: 'About',
-                          child: TextFormField(
-                            controller: _aboutCtrl,
+                            controller: _bioCtrl,
                             minLines: 3,
                             maxLines: 6,
                             maxLength: 280,
@@ -288,14 +249,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                             ),
                           ),
                         ),
-                        _LabeledField(
-                          label: 'Launched',
-                          child: TextFormField(controller: _launchedCtrl),
-                        ),
-                        _LabeledField(
-                          label: 'Collection',
-                          child: TextFormField(controller: _collectionCtrl),
-                        ),
+
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,

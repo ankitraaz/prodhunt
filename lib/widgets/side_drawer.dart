@@ -259,6 +259,9 @@ class AnimatedSideDrawerState extends State<AnimatedSideDrawer>
     ColorScheme drawerScheme,
     bool isDark,
   ) {
+    final photoUrl = (user?.profilePicture ?? '').trim();
+    final hasPhoto = photoUrl.isNotEmpty;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -279,17 +282,36 @@ class AnimatedSideDrawerState extends State<AnimatedSideDrawer>
                 CircleAvatar(
                   radius: 30,
                   backgroundColor: drawerScheme.onPrimary.withOpacity(0.15),
-                  backgroundImage: (user?.profilePicture.isNotEmpty ?? false)
-                      ? CachedNetworkImageProvider(user!.profilePicture)
-                      : null,
-                  child: (user?.profilePicture.isEmpty ?? true)
-                      ? Icon(
+                  child: hasPhoto
+                      ? ClipOval(
+                          child: CachedNetworkImage(
+                            key: ValueKey(
+                              photoUrl,
+                            ), // 👈 URL badle to image reload
+                            imageUrl:
+                                photoUrl, // (EditProfile me ?t=timestamp laga rahe ho)
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            errorWidget: (_, __, ___) => Icon(
+                              Icons.person,
+                              size: 30,
+                              color: drawerScheme.onPrimary,
+                            ),
+                          ),
+                        )
+                      : Icon(
                           Icons.person,
                           size: 30,
                           color: drawerScheme.onPrimary,
-                        )
-                      : null,
+                        ),
                 ),
+
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
