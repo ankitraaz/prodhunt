@@ -2,6 +2,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:prodhunt/pages/add_product.dart';
 import 'package:prodhunt/pages/profile_page.dart';
 import 'package:provider/provider.dart';
 
@@ -83,6 +84,7 @@ class MyApp extends StatelessWidget {
           '/auth': (_) => const AuthScreen(),
           '/home': (_) => HomePage(),
           '/profile': (_) => const ProfilePage(),
+          '/addProduct': (_) => const AddProduct(),
         },
       ),
     );

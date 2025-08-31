@@ -195,8 +195,8 @@ class AnimatedSideDrawerState extends State<AnimatedSideDrawer>
                           ),
                           _buildMenuItem(
                             icon: Icons.add_circle_outline,
-                            title: 'Submit',
-                            onTap: () => _navigateToPage('/submit'),
+                            title: 'Add Product',
+                            onTap: () => _navigateToPage('/addProduct'),
                             isHighlighted: true,
                           ),
                           _buildMenuItem(
