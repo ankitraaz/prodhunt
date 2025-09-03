@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:prodhunt/ui/helper/product_ui_mapper.dart';
 
-// ⬇️ NEW: services for live counts & bookmark
 import 'package:prodhunt/services/upvote_service.dart';
 import 'package:prodhunt/services/comment_service.dart';
 import 'package:prodhunt/services/save_service.dart';

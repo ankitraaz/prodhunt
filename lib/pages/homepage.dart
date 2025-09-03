@@ -1,6 +1,7 @@
 // lib/pages/homepage.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'package:prodhunt/services/firebase_service.dart';
 import 'package:prodhunt/model/product_model.dart';
@@ -36,7 +37,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             builder: (context) {
               return IconButton(
                 icon: const Icon(Icons.menu),
-                onPressed: () => context.openDrawer(), // yaha drawer open hoga
+                onPressed: () => context.openDrawer(),
               );
             },
           ),
@@ -130,10 +131,20 @@ class _TrendingTabState extends State<_TrendingTab>
     return StreamBuilder<DocumentSnapshot>(
       stream: docRef.snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return _skeletonList();
+        final isLoading =
+            snap.connectionState == ConnectionState.waiting ||
+            !snap.hasData ||
+            // if doc missing *and* this is cache-only, keep shimmering
+            (snap.hasData &&
+                !snap.data!.exists &&
+                snap.data!.metadata.isFromCache);
+
+        if (isLoading) return _skeletonList(context);
+
+        if (snap.hasError) {
+          return _errorBox(context, 'Failed to load trending');
         }
-        if (!snap.hasData || !snap.data!.exists) {
+        if (!snap.data!.exists) {
           return const Center(child: Text('No trending yet'));
         }
 
@@ -173,10 +184,19 @@ class _RecommendationsTabState extends State<_RecommendationsTab>
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return _skeletonList();
+        final isLoading =
+            snap.connectionState == ConnectionState.waiting ||
+            !snap.hasData ||
+            (snap.hasData &&
+                snap.data!.docs.isEmpty &&
+                snap.data!.metadata.isFromCache);
+
+        if (isLoading) return _skeletonList(context);
+
+        if (snap.hasError) {
+          return _errorBox(context, 'Failed to load recommendations');
         }
-        if (!snap.hasData || snap.data!.docs.isEmpty) {
+        if (snap.data!.docs.isEmpty) {
           return const Center(child: Text('No recommendations yet'));
         }
 
@@ -216,10 +236,19 @@ class _AllProductsTabState extends State<_AllProductsTab>
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return _skeletonList();
+        final isLoading =
+            snap.connectionState == ConnectionState.waiting ||
+            !snap.hasData ||
+            (snap.hasData &&
+                snap.data!.docs.isEmpty &&
+                snap.data!.metadata.isFromCache);
+
+        if (isLoading) return _skeletonList(context);
+
+        if (snap.hasError) {
+          return _errorBox(context, 'Failed to load products');
         }
-        if (!snap.hasData || snap.data!.docs.isEmpty) {
+        if (snap.data!.docs.isEmpty) {
           return const Center(child: Text('No products'));
         }
 
@@ -241,6 +270,7 @@ class _AllProductsTabState extends State<_AllProductsTab>
 
 Widget _cardsList(List<ProductUI> items) {
   return ListView.separated(
+    physics: const AlwaysScrollableScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
     itemCount: items.length,
     itemBuilder: (_, i) => ProductCard(product: items[i]),
@@ -248,11 +278,39 @@ Widget _cardsList(List<ProductUI> items) {
   );
 }
 
-Widget _skeletonList() {
+Widget _skeletonList(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  // Wrap each skeleton card with shimmer
   return ListView.separated(
+    physics: const AlwaysScrollableScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
     itemCount: 6,
-    itemBuilder: (_, __) => const ProductCard.skeleton(),
+    itemBuilder: (_, __) => Shimmer.fromColors(
+      baseColor: cs.surfaceContainerHigh,
+      highlightColor: cs.surfaceContainerHighest.withOpacity(0.7),
+      period: const Duration(milliseconds: 1200),
+      child: const ProductCard.skeleton(),
+    ),
     separatorBuilder: (_, __) => const SizedBox(height: 14),
+  );
+}
+
+Widget _errorBox(BuildContext context, String msg) {
+  final cs = Theme.of(context).colorScheme;
+  return Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.wifi_tethering_error, color: cs.error),
+        const SizedBox(height: 8),
+        Text(msg, style: TextStyle(color: cs.onSurfaceVariant)),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () {}, // pull-to-refresh or setState((){})
+          icon: const Icon(Icons.refresh),
+          label: const Text('Retry'),
+        ),
+      ],
+    ),
   );
 }
