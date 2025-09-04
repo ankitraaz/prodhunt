@@ -12,7 +12,20 @@
           "package_name": "com.example.prodhunt"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "382543890178-hphm03gn2nht1n5dahtm8utrno7h9gt0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.prodhunt",
+            "certificate_hash": "f194bf34a8563b970448a04b4f5e865164827f7d"
+          }
+        },
+        {
+          "client_id": "382543890178-icbgj0gs2qjnj0sso370grpt4r9edr0e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCDwUQf9QH-B8dagNyAiI8hlV4sLj5Upt8"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "382543890178-icbgj0gs2qjnj0sso370grpt4r9edr0e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "382543890178-0a2u0su86tsrqcqpn5vi4rr0ed52ccga.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.prodhunt"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +56,12 @@
           "package_name": "com.example.product_hunt"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "382543890178-icbgj0gs2qjnj0sso370grpt4r9edr0e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCDwUQf9QH-B8dagNyAiI8hlV4sLj5Upt8"
@@ -39,7 +69,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "382543890178-icbgj0gs2qjnj0sso370grpt4r9edr0e.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "382543890178-0a2u0su86tsrqcqpn5vi4rr0ed52ccga.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.prodhunt"
+              }
+            }
+          ]
         }
       }
     }
