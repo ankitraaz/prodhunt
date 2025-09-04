@@ -1,28 +1,21 @@
 // lib/services/product_submit_service.dart
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:image_picker/image_picker.dart';
 
 import 'package:prodhunt/services/firebase_service.dart';
 
 /// Handles product creation (publish now or schedule) + image uploads.
-/// Works on mobile and web (supports XFile and raw bytes).
-class ProductService {
+/// Always uses putData (bytes) for Storage to dodge iOS "Message too long".
+class ProductSubmitService {
   static final CollectionReference<Map<String, dynamic>> _products =
       FirebaseService.productsRef;
   static final FirebaseStorage _storage = FirebaseService.storage;
 
-  /// Creates a product document that satisfies your Firestore **rules**:
-  /// - `createdBy` must equal `auth.uid`
-  /// - `status` must be `"draft"` or `"published"` at create-time
-  /// - `upvoteCount` and `commentCount` start at 0
-  ///
-  /// For scheduling, we set `status: "draft"` and a future `launchDate`.
-  /// A Cloud Function (or cron job) can flip `status -> "published"`
-  /// when `launchDate <= now`.
+  /// Create product + upload images (logo/cover). Returns the product id.
   static Future<String> createProduct({
     // basics
     required String name,
@@ -46,16 +39,15 @@ class ProductService {
       throw Exception('Not signed in');
     }
 
-    // new product id
     final docRef = _products.doc();
 
-    // timestamps
+    // Firestore timestamps
     final serverNow = FieldValue.serverTimestamp();
     final DateTime defaultFuture = DateTime.now().add(
       const Duration(minutes: 5),
     );
 
-    // initial payload (passes security rules)
+    // Initial payload (image URLs filled after upload)
     final Map<String, dynamic> payload = {
       'name': name.trim(),
       'tagline': tagline.trim(),
@@ -65,92 +57,131 @@ class ProductService {
 
       'createdBy': uid,
       'status': publishNow ? 'published' : 'draft',
-
-      // for ordering on "All Products" and for scheduler
       'launchDate': publishNow
           ? serverNow
           : Timestamp.fromDate(scheduledAt ?? defaultFuture),
 
-      // rule-friendly counters
       'upvoteCount': 0,
       'commentCount': 0,
 
-      // misc
       'createdAt': serverNow,
       'updatedAt': serverNow,
 
-      // image fields (filled after upload)
-      'logoUrl': '',
-      'coverUrl': '',
-
-      // optional metric
       'views': 0,
     };
 
-    // write the product doc first (images come after)
-    await docRef.set(payload);
+    // 1) Create product doc
+    debugPrint('📌 [Firestore] Creating doc products/${docRef.id}');
+    try {
+      await docRef.set(payload);
+      debugPrint('✅ [Firestore] Created: ${docRef.id}');
+    } catch (e, st) {
+      debugPrint('❌ [Firestore] Create failed: $e\n$st');
+      rethrow;
+    }
 
-    // Upload images (ignore if none). Store under the user's folder
-    // so your Storage rules can allow owner writes.
+    // 2) Upload images (bytes on all platforms)
     String? logoUrl;
     if (logoBytes != null || logoFile != null) {
-      logoUrl = await _uploadImage(
-        path: 'users/$uid/products/${docRef.id}/logo.jpg',
-        file: logoFile,
-        bytes: logoBytes,
-      );
+      final path = 'users/$uid/products/${docRef.id}/logo.jpg';
+      try {
+        debugPrint(
+          '📤 [Storage] Uploading LOGO → $path'
+          '${kIsWeb && logoBytes != null ? ' (bytes: ${logoBytes!.length} B)' : ''}',
+        );
+        logoUrl = await _uploadImage(
+          path: path,
+          file: logoFile,
+          bytes: logoBytes,
+        );
+        debugPrint('✅ [Storage] Logo upload success → $logoUrl');
+      } catch (e, st) {
+        debugPrint('❌ [Storage] Logo upload failed: $e\n$st');
+        await _safeBumpUpdatedAt(docRef);
+        throw Exception('Logo upload failed: $e');
+      }
     }
 
     String? coverUrl;
     if (coverBytes != null || coverFile != null) {
-      coverUrl = await _uploadImage(
-        path: 'users/$uid/products/${docRef.id}/cover.jpg',
-        file: coverFile,
-        bytes: coverBytes,
-      );
+      final path = 'users/$uid/products/${docRef.id}/cover.jpg';
+      try {
+        debugPrint(
+          '📤 [Storage] Uploading COVER → $path'
+          '${kIsWeb && coverBytes != null ? ' (bytes: ${coverBytes!.length} B)' : ''}',
+        );
+        coverUrl = await _uploadImage(
+          path: path,
+          file: coverFile,
+          bytes: coverBytes,
+        );
+        debugPrint('✅ [Storage] Cover upload success → $coverUrl');
+      } catch (e, st) {
+        debugPrint('❌ [Storage] Cover upload failed: $e\n$st');
+        await _safeBumpUpdatedAt(docRef);
+        throw Exception('Cover upload failed: $e');
+      }
     }
 
-    // Update doc with uploaded image URLs (if any) + bump updatedAt
+    // 3) Patch URLs (if any) + cache-bust
     if (logoUrl != null || coverUrl != null) {
       final bust = DateTime.now().millisecondsSinceEpoch;
-      await docRef.update({
+      final updateMap = <String, dynamic>{
         if (logoUrl != null) 'logoUrl': '$logoUrl?t=$bust',
         if (coverUrl != null) 'coverUrl': '$coverUrl?t=$bust',
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      debugPrint('📌 [Firestore] Updating image URLs for ${docRef.id}');
+      try {
+        await docRef.update(updateMap);
+        debugPrint('✅ [Firestore] Image URLs updated');
+      } catch (e, st) {
+        debugPrint('❌ [Firestore] Update URLs failed: $e\n$st');
+        rethrow;
+      }
+    } else {
+      debugPrint('ℹ️ No images to update on Firestore.');
     }
 
-    // done — return id so UI can navigate/snack
     return docRef.id;
   }
 
-  /// Internal helper to upload either bytes (web) or file (mobile).
-  static Future<String?> _uploadImage({
+  /// Upload helper: ALWAYS uses putData (bytes). If [bytes] is null, reads from [file].
+  static Future<String> _uploadImage({
     required String path,
     XFile? file,
     Uint8List? bytes,
   }) async {
+    final ref = _storage.ref(path);
+    final String contentType = _guessContentType(file);
+
     try {
-      final ref = _storage.ref(path);
+      // Prepare data
+      final Uint8List data = bytes ?? await file!.readAsBytes();
+      debugPrint(
+        '⬆️  putData -> $path (contentType: $contentType, bytes: ${data.lengthInBytes})',
+      );
 
-      // pick a content-type
-      final String contentType = _guessContentType(file);
+      await ref.putData(data, SettableMetadata(contentType: contentType));
 
-      if (bytes != null) {
-        await ref.putData(bytes, SettableMetadata(contentType: contentType));
-      } else if (file != null) {
-        await ref.putFile(
-          File(file.path),
-          SettableMetadata(contentType: contentType),
-        );
-      } else {
-        return null;
-      }
+      final url = await ref.getDownloadURL();
+      debugPrint('🔗 [Storage] Download URL: $url');
+      return url;
+    } catch (e, st) {
+      debugPrint('🔥 [Storage] Upload failed at $path: $e\n$st');
+      rethrow;
+    }
+  }
 
-      return await ref.getDownloadURL();
+  static Future<void> _safeBumpUpdatedAt(
+    DocumentReference<Map<String, dynamic>> docRef,
+  ) async {
+    try {
+      await docRef.update({'updatedAt': FieldValue.serverTimestamp()});
+      debugPrint('↻ [Firestore] updatedAt bumped after failure');
     } catch (_) {
-      // swallow image errors so product creation doesn't fail entirely
-      return null;
+      // ignore
     }
   }
 
