@@ -1,11 +1,12 @@
 import 'dart:ui';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:prodhunt/model/user_model.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import 'package:prodhunt/model/user_model.dart';
 import 'package:prodhunt/pages/homepage.dart';
-import 'package:prodhunt/services/firebase_service.dart';
 import 'package:prodhunt/services/user_service.dart';
 
 final _auth = FirebaseAuth.instance;
@@ -19,7 +20,6 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _usernameCtrl = TextEditingController();
@@ -50,7 +50,7 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final email = _emailCtrl.text.trim().toLowerCase();
-    final password = _passwordCtrl.text; // keep as-is
+    final password = _passwordCtrl.text;
     final username = _usernameCtrl.text.trim().toLowerCase();
 
     setState(() => _isLoading = true);
@@ -61,13 +61,11 @@ class _AuthScreenState extends State<AuthScreen> {
           email: email,
           password: password,
         );
-
         if (!mounted) return;
         Navigator.of(
           context,
-        ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+        ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
       } else {
-        // 1) Username uniqueness
         final exists = await UserService.checkUsernameExists(username);
         if (exists) {
           _showSnack('This username is already taken. Try another one.');
@@ -75,16 +73,12 @@ class _AuthScreenState extends State<AuthScreen> {
           return;
         }
 
-        // 2) Create auth user
         final cred = await _auth.createUserWithEmailAndPassword(
           email: email,
           password: password,
         );
-
-        // 3) Keep FirebaseAuth displayName in sync (optional but nice)
         await cred.user?.updateDisplayName(username);
 
-        // 4) Create Firestore user via service (handles arrays, counts, timestamps)
         final model = UserModel(
           userId: cred.user!.uid,
           username: username,
@@ -93,18 +87,85 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         await UserService.createUserProfile(model);
 
-        // 5) Navigate to app
         if (!mounted) return;
         Navigator.of(
           context,
-        ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+        ).pushReplacement(MaterialPageRoute(builder: (_) => const HomePage()));
       }
     } on FirebaseAuthException catch (e) {
       _showSnack(_friendlyError(e));
-    } catch (e) {
+    } catch (_) {
       _showSnack('Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    try {
+      if (kIsWeb) {
+        final googleProvider = GoogleAuthProvider();
+        final userCred = await _auth.signInWithPopup(googleProvider);
+        if (userCred.user != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
+        }
+      } else {
+        final googleSignIn = GoogleSignIn(scopes: ['email']);
+        final gUser = await googleSignIn.signIn();
+        if (gUser == null) return;
+
+        final gAuth = await gUser.authentication;
+        final credential = GoogleAuthProvider.credential(
+          accessToken: gAuth.accessToken,
+          idToken: gAuth.idToken,
+        );
+
+        final userCred = await _auth.signInWithCredential(credential);
+        if (userCred.user != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
+        }
+      }
+    } catch (e) {
+      _showSnack("Google sign-in failed. $e");
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    try {
+      if (kIsWeb) {
+        final provider = OAuthProvider("apple.com");
+        final userCred = await _auth.signInWithPopup(provider);
+        if (userCred.user != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
+        }
+      } else {
+        final appleCredential = await SignInWithApple.getAppleIDCredential(
+          scopes: [
+            AppleIDAuthorizationScopes.email,
+            AppleIDAuthorizationScopes.fullName,
+          ],
+        );
+
+        final oauthCred = OAuthProvider("apple.com").credential(
+          idToken: appleCredential.identityToken,
+          accessToken: appleCredential.authorizationCode,
+        );
+
+        final userCred = await _auth.signInWithCredential(oauthCred);
+        if (userCred.user != null) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
+        }
+      }
+    } catch (e) {
+      _showSnack("Apple sign-in failed. $e");
     }
   }
 
@@ -141,7 +202,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Subtle gradient background (auto adapts to theme)
+          // Background gradient
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -154,7 +215,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ),
 
-          // Decorative blob + blur for modern look
+          // Decorative blobs
           Positioned(
             top: -80,
             right: -60,
@@ -174,7 +235,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Card(
                   elevation: 0,
                   color: cs.surface.withOpacity(isDark ? .6 : .7),
-                  shadowColor: cs.shadow,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
@@ -189,7 +249,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Logo / Title
+                              // Title
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -234,7 +294,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                               const SizedBox(height: 12),
 
-                              // Username (signup only)
+                              // Username
                               if (!_isLogin) ...[
                                 TextFormField(
                                   controller: _usernameCtrl,
@@ -242,7 +302,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                   decoration: const InputDecoration(
                                     labelText: 'Username',
                                     prefixIcon: Icon(Icons.alternate_email),
-                                    hintText: 'lowercase, 4+ chars',
                                   ),
                                   validator: (v) {
                                     final val = (v ?? '').trim();
@@ -279,27 +338,19 @@ class _AuthScreenState extends State<AuthScreen> {
                                   ),
                                 ),
                                 validator: (v) {
-                                  final val = (v ?? '');
-                                  if (val.trim().length < 6)
+                                  if ((v ?? '').trim().length < 6) {
                                     return 'At least 6 characters';
+                                  }
                                   return null;
                                 },
                               ),
                               const SizedBox(height: 18),
 
-                              // Submit
+                              // Submit button
                               SizedBox(
                                 width: double.infinity,
                                 child: FilledButton(
                                   onPressed: _isLoading ? null : _submit,
-                                  style: FilledButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                  ),
                                   child: _isLoading
                                       ? const SizedBox(
                                           height: 22,
@@ -311,7 +362,46 @@ class _AuthScreenState extends State<AuthScreen> {
                                       : Text(_isLogin ? 'Login' : 'Sign up'),
                                 ),
                               ),
+                              const SizedBox(height: 18),
 
+                              // Social login row
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  color: cs.surfaceVariant.withOpacity(0.3),
+                                  border: Border.all(
+                                    color: cs.outline.withOpacity(0.4),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: _isLoading
+                                          ? null
+                                          : _signInWithGoogle,
+                                      child: Image.asset(
+                                        'assets/images/google.png',
+                                        height: 36,
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: _isLoading
+                                          ? null
+                                          : _signInWithApple,
+                                      child: Image.asset(
+                                        'assets/images/apple.png',
+                                        height: 36,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               const SizedBox(height: 10),
 
                               // Toggle
