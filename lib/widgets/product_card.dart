@@ -1,5 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:prodhunt/ui/helper/product_ui_mapper.dart';
+import 'package:prodhunt/services/firebase_service.dart';
 
 import 'package:prodhunt/services/upvote_service.dart';
 import 'package:prodhunt/services/comment_service.dart';
@@ -18,39 +20,90 @@ class ProductCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    Widget image() {
+    /* ---------------- Cover (product image) ---------------- */
+    Widget cover() {
       if (_isSkeleton ||
           product.coverUrl == null ||
           product.coverUrl!.isEmpty) {
-        return _skeletonBox(context);
+        return _shimmerBox(context, height: double.infinity);
       }
+
       return Image.network(
         product.coverUrl!,
+        key: ValueKey(product.coverUrl),
         fit: BoxFit.cover,
-        loadingBuilder: (_, child, progress) =>
-            progress == null ? child : _skeletonBox(context),
+        filterQuality: FilterQuality.medium,
+        frameBuilder: (context, child, frame, wasSync) {
+          if (frame == null)
+            return _shimmerBox(context, height: double.infinity);
+          return AnimatedOpacity(
+            opacity: 1,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            child: child,
+          );
+        },
+        loadingBuilder: (_, child, progress) => progress == null
+            ? child
+            : _shimmerBox(context, height: double.infinity),
         errorBuilder: (_, __, ___) => _skeletonBox(context),
       );
     }
 
+    /* ---------------- Avatar (creator image from users/<uid>) ---------------- */
     Widget avatar() {
-      if (_isSkeleton ||
-          product.avatarUrl == null ||
-          product.avatarUrl!.isEmpty) {
-        return CircleAvatar(
-          radius: 14,
-          backgroundColor: cs.secondaryContainer,
-          child: Icon(
-            Icons.auto_awesome,
-            size: 16,
-            color: cs.onSecondaryContainer,
-          ),
-        );
+      if (_isSkeleton || product.creatorId.isEmpty) {
+        return _avatarPlaceholder(cs);
       }
-      return CircleAvatar(
-        radius: 14,
-        backgroundImage: NetworkImage(product.avatarUrl!),
-        backgroundColor: cs.surfaceContainerHighest,
+
+      final userDoc = FirebaseService.usersRef.doc(product.creatorId);
+      return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: userDoc.snapshots(),
+        builder: (context, snap) {
+          if (!snap.hasData || !snap.data!.exists) {
+            return _avatarPlaceholder(cs);
+          }
+          final data = snap.data!.data()!;
+          final url =
+              (data['profilePicture'] ??
+                      data['photoURL'] ??
+                      data['avatar'] ??
+                      data['image'] ??
+                      '')
+                  as String;
+
+          if (url.isEmpty) return _avatarPlaceholder(cs);
+
+          final img = Image.network(
+            url,
+            key: ValueKey(url),
+            width: 28,
+            height: 28,
+            fit: BoxFit.cover,
+            frameBuilder: (context, child, frame, _) {
+              if (frame == null)
+                return ClipOval(child: _shimmerBox(context, height: 28));
+              return AnimatedOpacity(
+                opacity: 1,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                child: child,
+              );
+            },
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return ClipOval(child: _shimmerBox(context, height: 28));
+            },
+            errorBuilder: (_, __, ___) =>
+                Icon(Icons.person, size: 16, color: cs.onSurface),
+          );
+
+          return CircleAvatar(
+            radius: 14,
+            backgroundColor: cs.surfaceContainerHighest,
+            child: ClipOval(child: img),
+          );
+        },
       );
     }
 
@@ -66,7 +119,7 @@ class ProductCard extends StatelessWidget {
           // media
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: AspectRatio(aspectRatio: 16 / 9, child: image()),
+            child: AspectRatio(aspectRatio: 16 / 9, child: cover()),
           ),
 
           // title row
@@ -155,14 +208,13 @@ class ProductCard extends StatelessWidget {
                 : _Pill(text: product.category),
           ),
 
-          // metrics row (SAFE)
+          // metrics row
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
             child: Row(
               children: [
                 const SizedBox(width: 4),
 
-                // ✅ guard: only use streams when product.id is non-empty & not skeleton
                 if (!_isSkeleton && product.id.isNotEmpty) ...[
                   _MetricLive(
                     icon: Icons.arrow_upward_rounded,
@@ -179,12 +231,10 @@ class ProductCard extends StatelessWidget {
                   ),
                   _Metric(icon: Icons.share_outlined, value: product.shares),
 
-                  // Bookmark (realtime)
                   StreamBuilder<bool>(
                     stream: SaveService.isSaved(product.id),
                     builder: (context, s) {
                       final saved = s.data ?? false;
-                      final cs = Theme.of(context).colorScheme;
                       return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 6),
                         decoration: BoxDecoration(
@@ -204,7 +254,6 @@ class ProductCard extends StatelessWidget {
                     },
                   ),
                 ] else ...[
-                  // 🔒 skeleton / empty id → show static placeholders (no Firestore calls)
                   _Metric(
                     icon: Icons.arrow_upward_rounded,
                     value: product.upvotes,
@@ -214,10 +263,8 @@ class ProductCard extends StatelessWidget {
                     value: product.comments,
                   ),
                   _Metric(icon: Icons.share_outlined, value: product.shares),
-                  // static bookmark capsule (disabled)
                   Builder(
                     builder: (context) {
-                      final cs = Theme.of(context).colorScheme;
                       return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 6),
                         padding: const EdgeInsets.symmetric(
@@ -249,7 +296,21 @@ class ProductCard extends StatelessWidget {
     );
   }
 
-  // skeleton helpers
+  /* ---------------- helpers ---------------- */
+
+  Widget _avatarPlaceholder(ColorScheme cs) => CircleAvatar(
+    radius: 14,
+    backgroundColor: cs.secondaryContainer,
+    child: Icon(Icons.person, size: 16, color: cs.onSecondaryContainer),
+  );
+
+  Widget _shimmerBox(BuildContext context, {double? height}) {
+    final c = Theme.of(context).colorScheme.surfaceContainerHigh;
+    return _Shimmer(
+      child: Container(height: height, color: c),
+    );
+  }
+
   Widget _skeletonBox(BuildContext context) =>
       Container(color: Theme.of(context).colorScheme.surfaceContainerHigh);
 
@@ -259,12 +320,14 @@ class ProductCard extends StatelessWidget {
     double height = 12,
   }) {
     final c = Theme.of(context).colorScheme.surfaceContainerHigh;
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: c,
-        borderRadius: BorderRadius.circular(6),
+    return _Shimmer(
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: c,
+          borderRadius: BorderRadius.circular(6),
+        ),
       ),
     );
   }
@@ -275,13 +338,15 @@ class ProductCard extends StatelessWidget {
     double height = 28,
   }) {
     final c = Theme.of(context).colorScheme.surfaceContainerHigh;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 6),
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: c,
-        borderRadius: BorderRadius.circular(8),
+    return _Shimmer(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: c,
+          borderRadius: BorderRadius.circular(8),
+        ),
       ),
     );
   }
@@ -343,7 +408,6 @@ class _Metric extends StatelessWidget {
   }
 }
 
-// 🔁 Live metric with StreamBuilder (+ optional onTap)
 class _MetricLive extends StatelessWidget {
   const _MetricLive({
     required this.icon,
@@ -384,7 +448,7 @@ class _MetricLive extends StatelessWidget {
 
     final child = StreamBuilder<int>(
       stream: stream,
-      builder: (_, snap) => box(snap.data ?? fallback),
+      builder: (_, s) => box(s.data ?? fallback),
     );
 
     if (onTap == null) return child;
@@ -398,4 +462,63 @@ class _MetricLive extends StatelessWidget {
       ),
     );
   }
+}
+
+/* ---------------- Shimmer primitive ---------------- */
+
+class _Shimmer extends StatefulWidget {
+  const _Shimmer({required this.child});
+  final Widget child;
+
+  @override
+  State<_Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<_Shimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ac = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _ac.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme.surfaceContainerHigh;
+    final hi = Theme.of(context).colorScheme.surfaceContainerHighest;
+
+    return AnimatedBuilder(
+      animation: _ac,
+      builder: (_, __) {
+        return ShaderMask(
+          shaderCallback: (rect) {
+            final w = rect.width;
+            final dx = (w * 1.5) * _ac.value - w * 0.5;
+            return LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [base, hi, base],
+              stops: const [0.35, 0.5, 0.65],
+              transform: _GradientTranslation(dx, 0),
+            ).createShader(rect);
+          },
+          blendMode: BlendMode.srcATop,
+          child: widget.child,
+        );
+      },
+    );
+  }
+}
+
+class _GradientTranslation extends GradientTransform {
+  final double dx, dy;
+  const _GradientTranslation(this.dx, this.dy);
+  @override
+  Matrix4 transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.identity()..translate(dx, dy);
 }

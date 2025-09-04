@@ -8,13 +8,20 @@ class ProductUI {
   final String name;
   final String category;
   final List<String> tags;
-  final String? coverUrl; // hero (use gallery[0] or logo)
-  final String? avatarUrl; // small logo
+
+  /// Card ke top me jo large image jayegi (product cover)
+  final String? coverUrl;
+
+  /// Avatar ab user ka hoga -> iske liye creatorId chahiye
+  final String creatorId;
+
+  // metrics
   final int views;
   final int upvotes;
   final int comments;
   final int shares;
   final int saves;
+
   final String timeAgo;
   final VoidCallback? onMorePressed;
   final bool isSkeleton;
@@ -25,7 +32,7 @@ class ProductUI {
     required this.category,
     required this.tags,
     required this.coverUrl,
-    required this.avatarUrl,
+    required this.creatorId,
     required this.views,
     required this.upvotes,
     required this.comments,
@@ -42,7 +49,7 @@ class ProductUI {
       category = '',
       tags = const [],
       coverUrl = null,
-      avatarUrl = null,
+      creatorId = '',
       views = 0,
       upvotes = 0,
       comments = 0,
@@ -60,21 +67,22 @@ class ProductUI {
 class ProductUIMapper {
   /// For "All Products" / "Recommendations"
   static ProductUI fromProductModel(ProductModel p) {
-    // Handle nullable launchDate safely (your updated model makes it nullable)
-    final launched = p.launchDate ?? p.createdAt;
+    final launched = p.launchDate ?? p.createdAt ?? DateTime.now();
     return ProductUI(
       id: p.productId,
       name: p.name,
       category: p.category,
       tags: p.tags,
-      coverUrl: (p.gallery.isNotEmpty ? p.gallery.first : p.logo),
-      avatarUrl: p.logo,
-      views: 2500, // TODO: map real views if you store them
+      // coverUrl comes from Firestore field `coverUrl`
+      coverUrl: (p.coverUrl.isNotEmpty ? p.coverUrl : null),
+      // ⬇️ avatar ke liye creatorId pass karein (photo hum ProductCard me users/<uid> se nikaalenge)
+      creatorId: p.createdBy,
+      views: p.views ?? 0, // if you added views in model; else keep 0
       upvotes: p.upvoteCount,
       comments: p.commentCount,
-      shares: 20, // TODO: map if present
-      saves: 20, // TODO: map if present
-      timeAgo: _timeAgo(launched ?? DateTime.now()),
+      shares: 0,
+      saves: 0,
+      timeAgo: _timeAgo(launched),
       onMorePressed: () {},
     );
   }
@@ -85,11 +93,13 @@ class ProductUIMapper {
     return ProductUI(
       id: t.productId,
       name: t.productName,
-      category: '—', // category not in trending snapshot
+      category: '—',
       tags: const [],
-      coverUrl: t.productLogo,
-      avatarUrl: t.productLogo,
-      views: 2500,
+      // trending me cover nahi hota, to null rehne do (UI graceful grey box dikhayega)
+      coverUrl: null,
+      // creatorId trending snapshot me nahi hota; blank -> placeholder avatar
+      creatorId: '',
+      views: 0,
       upvotes: t.upvoteCount,
       comments: 0,
       shares: 0,
