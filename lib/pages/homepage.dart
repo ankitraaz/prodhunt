@@ -34,12 +34,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         backgroundColor: cs.surface,
         appBar: AppBar(
           leading: Builder(
-            builder: (context) {
-              return IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () => context.openDrawer(),
-              );
-            },
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => context.openDrawer(),
+            ),
           ),
           backgroundColor: cs.surface,
           elevation: 0,
@@ -129,31 +127,34 @@ class _TrendingTabState extends State<_TrendingTab>
         .doc(id);
 
     return StreamBuilder<DocumentSnapshot>(
-      stream: docRef.snapshots(),
+      // 👇 includeMetadataChanges: cache→server transition ko capture karega
+      stream: docRef.snapshots(includeMetadataChanges: true),
       builder: (context, snap) {
         final isLoading =
             snap.connectionState == ConnectionState.waiting ||
             !snap.hasData ||
-            // if doc missing *and* this is cache-only, keep shimmering
             (snap.hasData &&
                 !snap.data!.exists &&
                 snap.data!.metadata.isFromCache);
 
         if (isLoading) return _skeletonList(context);
 
-        if (snap.hasError) {
-          return _errorBox(context, 'Failed to load trending');
-        }
-        if (!snap.data!.exists) {
+        if (snap.hasError) return _errorBox(context, 'Failed to load trending');
+        if (!snap.data!.exists)
           return const Center(child: Text('No trending yet'));
-        }
 
         final model = TrendingModel.fromFirestore(snap.data!);
         final items = model.topProducts
             .map(ProductUIMapper.fromTrending)
             .toList();
 
-        return _cardsList(items);
+        return _cardsList(
+          items,
+          onRefresh: () async {
+            // force server fetch
+            await docRef.get(const GetOptions(source: Source.server));
+          },
+        );
       },
     );
   }
@@ -182,7 +183,7 @@ class _RecommendationsTabState extends State<_RecommendationsTab>
         .limit(30);
 
     return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
+      stream: query.snapshots(includeMetadataChanges: true),
       builder: (context, snap) {
         final isLoading =
             snap.connectionState == ConnectionState.waiting ||
@@ -205,7 +206,12 @@ class _RecommendationsTabState extends State<_RecommendationsTab>
             .map(ProductUIMapper.fromProductModel)
             .toList();
 
-        return _cardsList(items);
+        return _cardsList(
+          items,
+          onRefresh: () async {
+            await query.get(const GetOptions(source: Source.server));
+          },
+        );
       },
     );
   }
@@ -234,7 +240,7 @@ class _AllProductsTabState extends State<_AllProductsTab>
         .limit(50);
 
     return StreamBuilder<QuerySnapshot>(
-      stream: query.snapshots(),
+      stream: query.snapshots(includeMetadataChanges: true),
       builder: (context, snap) {
         final isLoading =
             snap.connectionState == ConnectionState.waiting ||
@@ -245,19 +251,21 @@ class _AllProductsTabState extends State<_AllProductsTab>
 
         if (isLoading) return _skeletonList(context);
 
-        if (snap.hasError) {
-          return _errorBox(context, 'Failed to load products');
-        }
-        if (snap.data!.docs.isEmpty) {
+        if (snap.hasError) return _errorBox(context, 'Failed to load products');
+        if (snap.data!.docs.isEmpty)
           return const Center(child: Text('No products'));
-        }
 
         final items = snap.data!.docs
             .map((d) => ProductModel.fromFirestore(d))
             .map(ProductUIMapper.fromProductModel)
             .toList();
 
-        return _cardsList(items);
+        return _cardsList(
+          items,
+          onRefresh: () async {
+            await query.get(const GetOptions(source: Source.server));
+          },
+        );
       },
     );
   }
@@ -268,19 +276,40 @@ class _AllProductsTabState extends State<_AllProductsTab>
 
 /* ---------------- Shared UI ---------------- */
 
-Widget _cardsList(List<ProductUI> items) {
-  return ListView.separated(
-    physics: const AlwaysScrollableScrollPhysics(),
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-    itemCount: items.length,
-    itemBuilder: (_, i) => ProductCard(product: items[i]),
-    separatorBuilder: (_, __) => const SizedBox(height: 14),
+// ✅ ListView.builder + gentle slide/fade-in per item + pull-to-refresh
+Widget _cardsList(
+  List<ProductUI> items, {
+  required Future<void> Function() onRefresh,
+}) {
+  return RefreshIndicator(
+    onRefresh: onRefresh,
+    child: ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final w = TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.05, end: 0),
+          duration: Duration(milliseconds: 180 + (i * 18).clamp(0, 180)),
+          curve: Curves.easeOut,
+          builder: (_, offset, child) => Transform.translate(
+            offset: Offset(0, 24 * offset),
+            child: Opacity(opacity: 1 - offset, child: child),
+          ),
+          child: ProductCard(product: items[i]),
+        );
+        return Padding(
+          padding: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 14),
+          child: KeyedSubtree(key: ValueKey(items[i].id), child: w),
+        );
+      },
+    ),
   );
 }
 
+// 🔷 Skeleton list with Shimmer
 Widget _skeletonList(BuildContext context) {
   final cs = Theme.of(context).colorScheme;
-  // Wrap each skeleton card with shimmer
   return ListView.separated(
     physics: const AlwaysScrollableScrollPhysics(),
     padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -306,7 +335,7 @@ Widget _errorBox(BuildContext context, String msg) {
         Text(msg, style: TextStyle(color: cs.onSurfaceVariant)),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: () {}, // pull-to-refresh or setState((){})
+          onPressed: () => {}, // pull to refresh is available
           icon: const Icon(Icons.refresh),
           label: const Text('Retry'),
         ),
