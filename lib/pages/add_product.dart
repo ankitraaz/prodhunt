@@ -131,7 +131,7 @@ class _AddProductState extends State<AddProduct> {
           .where((e) => e.isNotEmpty)
           .toList();
 
-      final productId = await ProductService.createProduct(
+      final productId = await ProductSubmitService.createProduct(
         name: _nameCtrl.text,
         tagline: _taglineCtrl.text,
         description: _descCtrl.text,
