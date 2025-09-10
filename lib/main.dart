@@ -6,9 +6,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:prodhunt/pages/add_product.dart';
 import 'package:prodhunt/pages/advertise.dart';
+import 'package:prodhunt/pages/news_page.dart';
 import 'package:prodhunt/pages/notification_page.dart';
 import 'package:prodhunt/pages/profile_page.dart';
 import 'package:prodhunt/pages/settings_page.dart';
+import 'package:prodhunt/pages/upvote_page.dart';
 import 'package:provider/provider.dart';
 
 import 'package:prodhunt/Auth/auth.dart';
@@ -99,6 +101,9 @@ class MyApp extends StatelessWidget {
           '/notification': (_) => const NotificationPage(),
           '/advertise': (_) => const AdvertisePage(),
           '/settings': (_) => const SettingsPage(),
+          '/upvotes': (_) => const UpvotePage(),
+          '/homepage': (_) => const HomePage(),
+          '/news': (_) => const NewsPage(),
         },
       ),
     );

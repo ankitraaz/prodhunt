@@ -174,20 +174,20 @@ class AnimatedSideDrawerState extends State<AnimatedSideDrawer>
                             onTap: () => _navigateToPage('/launches'),
                           ),
                           _buildMenuItem(
-                            icon: Icons.category_outlined,
-                            title: 'Categories',
-                            onTap: () => _navigateToPage('/categories'),
+                            icon: Icons.maps_home_work_outlined,
+                            title: 'Home',
+                            onTap: () => _navigateToPage('/homepage'),
                           ),
                           _buildMenuItem(
                             icon: Icons.newspaper_outlined,
                             title: 'News',
                             onTap: () => _navigateToPage('/news'),
                           ),
-                          _buildMenuItem(
-                            icon: Icons.forum_outlined,
-                            title: 'Forums',
-                            onTap: () => _navigateToPage('/forums'),
-                          ),
+                          // _buildMenuItem(
+                          //   icon: Icons.forum_outlined,
+                          //   title: 'Forums',
+                          //   onTap: () => _navigateToPage('/forums'),
+                          // ),
                           _buildMenuItem(
                             icon: Icons.campaign_outlined,
                             title: 'Advertise',
@@ -209,11 +209,11 @@ class AnimatedSideDrawerState extends State<AnimatedSideDrawer>
                             title: 'Upvotes',
                             onTap: () => _navigateToPage('/upvotes'),
                           ),
-                          _buildMenuItem(
-                            icon: Icons.layers_outlined,
-                            title: 'Stacks',
-                            onTap: () => _navigateToPage('/stacks'),
-                          ),
+                          // _buildMenuItem(
+                          //   icon: Icons.layers_outlined,
+                          //   title: 'Stacks',
+                          //   onTap: () => _navigateToPage('/stacks'),
+                          // ),
                           _buildMenuItem(
                             icon: Icons.timeline_outlined,
                             title: 'Activity',
