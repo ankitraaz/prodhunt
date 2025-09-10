@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:prodhunt/services/firebase_service.dart';
 import 'package:prodhunt/services/notification_service.dart';
 
 class NotificationPage extends StatelessWidget {
@@ -7,6 +8,9 @@ class NotificationPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final currentUid = FirebaseService.currentUserId;
+
+    print("🔑 Current logged in UID: $currentUid");
 
     return Scaffold(
       appBar: AppBar(title: const Text("Notifications")),
@@ -16,11 +20,21 @@ class NotificationPage extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text("No notifications yet"));
+
+          if (snapshot.hasError) {
+            print("❌ Notification stream error: ${snapshot.error}");
+            return const Center(child: Text("Error loading notifications"));
           }
 
-          final notifs = snapshot.data!;
+          final notifs = snapshot.data ?? [];
+          print("📩 Notifications fetched: ${notifs.length}");
+          for (final n in notifs) {
+            print("➡️ notif.userId=${n['userId']}, message=${n['message']}");
+          }
+
+          if (notifs.isEmpty) {
+            return const Center(child: Text("No notifications yet"));
+          }
 
           return ListView.separated(
             itemCount: notifs.length,
@@ -64,7 +78,6 @@ class NotificationPage extends StatelessWidget {
                     ? Icon(Icons.fiber_new, color: cs.primary, size: 20)
                     : null,
                 onTap: () async {
-                  // Mark as read
                   if (n['id'] != null) {
                     await NotificationService.markAsRead(n['id']);
                   }

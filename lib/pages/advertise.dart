@@ -14,6 +14,9 @@ class AdvertisePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     final partners = [
       {
         "name": "Netlify",
@@ -38,7 +41,7 @@ class AdvertisePage extends StatelessWidget {
     ];
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: cs.background,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -48,23 +51,21 @@ class AdvertisePage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 15),
               child: Column(
-                children: const [
+                children: [
                   Text(
                     "OUR PARTNERS",
-                    style: TextStyle(
-                      fontSize: 14,
+                    style: textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.5,
-                      color: Colors.deepPurple,
+                      color: cs.primary,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     "We work with the best partners",
-                    style: TextStyle(
-                      fontSize: 22,
+                    style: textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: cs.onBackground,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -94,16 +95,16 @@ class AdvertisePage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cs.surface,
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withAlpha(13),
+                            color: cs.shadow.withOpacity(0.08),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
                         ],
-                        border: Border.all(color: Colors.grey[200]!),
+                        border: Border.all(color: cs.outlineVariant),
                       ),
                       child: Center(
                         child: Image.asset(
@@ -111,10 +112,10 @@ class AdvertisePage extends StatelessWidget {
                           height: 40,
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) {
-                            print(
+                            debugPrint(
                               'Error loading image: ${partner["logo"]} - $error',
                             );
-                            return const Icon(Icons.error);
+                            return Icon(Icons.error, color: cs.error);
                           },
                         ),
                       ),

@@ -8,6 +8,7 @@ import 'package:prodhunt/pages/add_product.dart';
 import 'package:prodhunt/pages/advertise.dart';
 import 'package:prodhunt/pages/notification_page.dart';
 import 'package:prodhunt/pages/profile_page.dart';
+import 'package:prodhunt/pages/settings_page.dart';
 import 'package:provider/provider.dart';
 
 import 'package:prodhunt/Auth/auth.dart';
@@ -97,6 +98,7 @@ class MyApp extends StatelessWidget {
           '/addProduct': (_) => const AddProduct(),
           '/notification': (_) => const NotificationPage(),
           '/advertise': (_) => const AdvertisePage(),
+          '/settings': (_) => const SettingsPage(),
         },
       ),
     );
