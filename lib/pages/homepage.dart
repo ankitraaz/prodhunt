@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:prodhunt/ads/ads_service/banner_ad_widget.dart';
+import 'package:prodhunt/pages/profile_page.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:prodhunt/services/firebase_service.dart';
@@ -55,13 +56,24 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           actions: [
             IconButton(
               visualDensity: VisualDensity.compact,
-              onPressed: () {},
+              onPressed: () {
+                // The search icon button's onPressed is now empty.
+                // You can implement search functionality here later.
+              },
               icon: const Icon(Icons.search_rounded),
             ),
             const SizedBox(width: 4),
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: CircleAvatar(
+            // Wrap the CircleAvatar with an IconButton to make it clickable
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                // 👈 This is the correct place for the navigation code
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfilePage()),
+                );
+              },
+              icon: CircleAvatar(
                 radius: 16,
                 backgroundColor: cs.secondaryContainer,
                 child: Icon(Icons.person, color: cs.onSecondaryContainer),

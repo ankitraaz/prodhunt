@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:prodhunt/provider/theme_provider.dart';
+import 'package:provider/provider.dart';
 
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
-
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  bool isDark = false;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final themeProvider = Provider.of<ThemeProvider>(context);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Settings")),
@@ -37,11 +33,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               Switch(
-                value: isDark,
+                value: themeProvider.isDarkMode,
                 onChanged: (val) {
-                  setState(() {
-                    isDark = val;
-                  });
+                  themeProvider.toggleTheme(val);
                 },
               ),
             ],
