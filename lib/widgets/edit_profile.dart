@@ -1,9 +1,11 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:prodhunt/ads/ads_service/banner_ad_widget.dart';
 
 import 'package:prodhunt/services/firebase_service.dart';
 import 'package:prodhunt/services/user_service.dart';
@@ -250,6 +252,8 @@ class _EditProfilePageState extends State<EditProfilePage> {
                           ),
                         ),
 
+                        const SizedBox(height: 16),
+                        if (!kIsWeb) const BannerAdWidget(),
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,

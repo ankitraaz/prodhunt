@@ -1,6 +1,8 @@
 // lib/pages/homepage.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:prodhunt/ads/ads_service/banner_ad_widget.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'package:prodhunt/services/firebase_service.dart';
@@ -97,6 +99,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             _AllProductsTab(),
           ],
         ),
+        // 👇 Banner ad sabse neeche
+        bottomNavigationBar: kIsWeb
+            ? null // 👈 Web pe ad hata do
+            : const BannerAdWidget(), // 👈 Android/iOS pe show hoga
       ),
     );
   }

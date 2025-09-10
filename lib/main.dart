@@ -1,8 +1,11 @@
 // lib/main.dart
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:prodhunt/pages/add_product.dart';
+import 'package:prodhunt/pages/advertise.dart';
 import 'package:prodhunt/pages/notification_page.dart';
 import 'package:prodhunt/pages/profile_page.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +18,12 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // ✅ Run AdMob initialize only on Android/iOS
+  if (!kIsWeb) {
+    await MobileAds.instance.initialize();
+  }
+
   runApp(const MyApp());
 }
 
@@ -87,6 +96,7 @@ class MyApp extends StatelessWidget {
           '/profile': (_) => const ProfilePage(),
           '/addProduct': (_) => const AddProduct(),
           '/notification': (_) => const NotificationPage(),
+          '/advertise': (_) => const AdvertisePage(),
         },
       ),
     );

@@ -1,9 +1,8 @@
-// lib/services/upvote_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:prodhunt/model/user_model.dart';
 import 'package:prodhunt/services/user_service.dart';
-
-import '../services/firebase_service.dart';
+import 'package:prodhunt/services/firebase_service.dart';
+import 'package:prodhunt/services/notification_service.dart';
 
 class UpvoteService {
   // Toggle upvote (add if not exists, remove if exists)
@@ -32,9 +31,10 @@ class UpvoteService {
         Map<String, dynamic> productData =
             productSnap.data() as Map<String, dynamic>;
         int currentUpvotes = productData['upvoteCount'] ?? 0;
+        String? productOwnerId = productData['createdBy'];
 
         if (upvoteSnap.exists) {
-          // Remove upvote
+          // ❌ Remove upvote
           transaction.delete(upvoteRef);
           transaction.update(productRef, {
             'upvoteCount': currentUpvotes - 1,
@@ -42,7 +42,7 @@ class UpvoteService {
           });
           return false; // Upvote removed
         } else {
-          // Add upvote
+          // ✅ Add upvote
           UserModel? currentUser = await UserService.getCurrentUserProfile();
 
           transaction.set(upvoteRef, {
@@ -60,6 +60,22 @@ class UpvoteService {
             'upvoteCount': currentUpvotes + 1,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+
+          // 🔔 Send notification to product owner
+          if (productOwnerId != null && productOwnerId != currentUserId) {
+            await NotificationService.createNotification(
+              userId: productOwnerId,
+              actorId: currentUserId,
+              actorName:
+                  currentUser?.displayName ?? currentUser?.username ?? '',
+              actorPhoto: currentUser?.profilePicture ?? '',
+              productId: productId,
+              type: 'upvote',
+              message:
+                  "${currentUser?.displayName ?? currentUser?.username} upvoted your product",
+            );
+          }
+
           return true; // Upvote added
         }
       });

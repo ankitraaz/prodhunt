@@ -1,0 +1,13 @@
+[
+    {
+        "origin": [
+            "https://project-1-31624.web.app"
+        ],
+        "method": [
+            "GET",
+            "HEAD",
+            "OPTIONS"
+        ],
+        "maxAgeSeconds": 3600
+    }
+]
