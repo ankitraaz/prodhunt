@@ -4,8 +4,6 @@ import 'package:prodhunt/services/upvote_service.dart';
 class UpvotePage extends StatelessWidget {
   const UpvotePage({super.key});
 
-  /// 👉 यहाँ तुम decide कर सकते हो कौन सा productId लेना है।
-  /// फिलहाल example के लिए hardcode किया है।
   final String _productId = "AHfjRewA55qlwhbM2NCL";
 
   @override
