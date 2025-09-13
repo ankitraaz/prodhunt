@@ -46,7 +46,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           elevation: 0,
           titleSpacing: 16,
           title: Text(
-            'Product Hunt',
+            'Prod Hunt',
             style: TextStyle(
               color: cs.onSurface,
               fontWeight: FontWeight.w800,

@@ -38,6 +38,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_image_compress: ^2.4.0
+  flutter_launcher_icons: ^0.14.4
   google_fonts: ^6.3.0
   google_mobile_ads: ^6.0.0
   google_sign_in: ^6.1.4
@@ -95,3 +96,8 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/prh.png"
+  min_sdk_android: 23
