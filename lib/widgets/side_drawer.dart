@@ -1,5 +1,6 @@
 // lib/widgets/animated_side_drawer.dart
 import 'package:flutter/material.dart';
+import 'package:prodhunt/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -199,6 +200,22 @@ class AnimatedSideDrawerState extends State<AnimatedSideDrawer>
                             onTap: () => _navigateToPage('/addProduct'),
                             isHighlighted: true,
                           ),
+                          // 🔥 Admin Panel (visible only for admin users)
+                          StreamBuilder<bool>(
+                            stream: UserService.isAdminStream(),
+                            builder: (context, snap) {
+                              if (snap.data == true) {
+                                return _buildMenuItem(
+                                  icon: Icons.admin_panel_settings_outlined,
+                                  title: 'Admin Panel',
+                                  onTap: () => _navigateToPage('/admin'),
+                                  isHighlighted: true,
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+
                           _buildMenuItem(
                             icon: Icons.notifications_outlined,
                             title: 'Notification',

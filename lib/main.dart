@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:prodhunt/pages/activity_page.dart';
 import 'package:prodhunt/pages/add_product.dart';
+import 'package:prodhunt/pages/admin_panel.dart';
+
 import 'package:prodhunt/pages/advertise.dart';
 import 'package:prodhunt/pages/news_page.dart';
 import 'package:prodhunt/pages/notification_page.dart';
@@ -13,6 +15,7 @@ import 'package:prodhunt/pages/profile_page.dart';
 import 'package:prodhunt/pages/settings_page.dart';
 import 'package:prodhunt/pages/upvote_page.dart';
 import 'package:prodhunt/provider/theme_provider.dart';
+
 import 'package:prodhunt/utils/app_theme.dart';
 import 'package:provider/provider.dart';
 
@@ -51,7 +54,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Product Hunt',
-      themeMode: themeProvider.themeMode, // 🔑 toggle से control होगा
+      themeMode: themeProvider.themeMode,
       theme: AppTheme.lightTheme(),
       darkTheme: AppTheme.darkTheme(),
       home: const _AuthGate(),
@@ -67,6 +70,7 @@ class MyApp extends StatelessWidget {
         '/homepage': (_) => const HomePage(),
         '/news': (_) => const NewsPage(),
         '/activity': (context) => const ActivityPage(),
+        '/admin': (context) => const AdminDashboardPage(),
       },
     );
   }
