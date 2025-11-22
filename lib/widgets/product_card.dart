@@ -144,7 +144,7 @@ class _ProductCardState extends State<ProductCard> {
         child: Image.network(
           product.coverUrl!,
           key: ValueKey(product.coverUrl),
-          fit: BoxFit.cover,
+          fit: BoxFit.fill,
           filterQuality: FilterQuality.medium,
           frameBuilder: (context, child, frame, wasSync) {
             if (frame == null) {
